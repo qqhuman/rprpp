@@ -61,21 +61,18 @@ void runWithInterop(const std::filesystem::path& exeDirPath, int deviceId)
     RprPpImageFormat format = RPRPP_IMAGE_FROMAT_R32G32B32A32_SFLOAT;
     RprPostProcessing postProcessing(deviceId);
 
-    VkPhysicalDevice physicalDevice = (VkPhysicalDevice)postProcessing.getVkPhysicalDevice();
-    VkDevice device = (VkDevice)postProcessing.getVkDevice();
-    VkQueue queue = (VkQueue)postProcessing.getVkQueue();
     std::vector<VkFence> fences;
     std::vector<VkSemaphore> frameBuffersReleaseSemaphores;
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
         VkSemaphore semaphore;
         VkSemaphoreCreateInfo semaphoreInfo { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore));
+        VK_CHECK(vkCreateSemaphore(postProcessing.getVkDevice(), &semaphoreInfo, nullptr, &semaphore));
         frameBuffersReleaseSemaphores.push_back(semaphore);
 
         VkFence fence;
         VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        VK_CHECK(vkCreateFence(device, &fenceInfo, nullptr, &fence));
+        VK_CHECK(vkCreateFence(postProcessing.getVkDevice(), &fenceInfo, nullptr, &fence));
         fences.push_back(fence);
     }
 
@@ -85,12 +82,12 @@ void runWithInterop(const std::filesystem::path& exeDirPath, int deviceId)
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pSignalSemaphores = frameBuffersReleaseSemaphores.data();
         submitInfo.signalSemaphoreCount = frameBuffersReleaseSemaphores.size();
-        VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, nullptr));
+        VK_CHECK(vkQueueSubmit(postProcessing.getVkQueue(), 1, &submitInfo, nullptr));
     }
 
     HybridProInteropInfo aovsInteropInfo = HybridProInteropInfo {
-        .physicalDevice = physicalDevice,
-        .device = device,
+        .physicalDevice = postProcessing.getVkPhysicalDevice(),
+        .device = postProcessing.getVkDevice(),
         .framesInFlight = FRAMES_IN_FLIGHT,
         .frameBuffersReleaseSemaphores = frameBuffersReleaseSemaphores.data(),
     };
@@ -117,15 +114,16 @@ void runWithInterop(const std::filesystem::path& exeDirPath, int deviceId)
         renderer.flushFrameBuffers();
         
         VkFence fence = fences[currentFrame];
-        VK_CHECK(vkWaitForFences(device, 1, &fence, true, UINT64_MAX));
-        vkResetFences(device, 1, &fence);
+        VK_CHECK(vkWaitForFences(postProcessing.getVkDevice(), 1, &fence, true, UINT64_MAX));
+        vkResetFences(postProcessing.getVkDevice(), 1, &fence);
 
         uint32_t semaphoreIndex = renderer.getSemaphoreIndex();
         VkSemaphore aovsReadySemaphore = frameBuffersReadySemaphores[semaphoreIndex];
         VkSemaphore processingFinishedSemaphore = frameBuffersReleaseSemaphores[semaphoreIndex];
 
         postProcessing.run(aovsReadySemaphore, processingFinishedSemaphore);
-        vkQueueSubmit(queue, 0, nullptr, fence);
+        vkQueueSubmit(postProcessing.getVkQueue(), 0, nullptr, fence);
+        currentFrame = (currentFrame + 1) % FRAMES_IN_FLIGHT;
 
         if (i == 0 || i == ITERATIONS - 1) 
         {
@@ -139,18 +137,16 @@ void runWithInterop(const std::filesystem::path& exeDirPath, int deviceId)
             std::filesystem::remove(resultPath);
             savePngImage(resultPath.string().c_str(), output.data(), WIDTH, HEIGHT, format);
         }
-
-        currentFrame = (currentFrame + 1) % FRAMES_IN_FLIGHT;
     }
 
     postProcessing.waitQueueIdle();
 
     for (auto f : fences) {
-        vkDestroyFence(device, f, nullptr);
+        vkDestroyFence(postProcessing.getVkDevice(), f, nullptr);
     }
 
     for (auto s : frameBuffersReleaseSemaphores) {
-        vkDestroySemaphore(device, s, nullptr);
+        vkDestroySemaphore(postProcessing.getVkDevice(), s, nullptr);
     }
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
 #include "rpr_helper.h"
 #include "capi/rprpp.h"
 
@@ -13,17 +14,20 @@ public:
     RprPostProcessing& operator=(const RprPostProcessing&) = delete;
     RprPostProcessing(uint32_t deviceId)
     {
+        std::cout << "HybridProRenderer()" << std::endl;
         RPRPP_CHECK(rprppCreateContext(deviceId, &m_context));
     }
 
     RprPostProcessing(RprPostProcessing&& other) noexcept
     {
+        std::cout << "RprPostProcessing(RprPostProcessing&& other)" << std::endl;
         m_context = other.m_context;
         other.m_context = nullptr;
     }
 
     ~RprPostProcessing()
     {
+        std::cout << "~RprPostProcessing()" << std::endl;
         RPRPP_CHECK(rprppDestroyContext(m_context));
     }
 
@@ -64,25 +68,25 @@ public:
         RPRPP_CHECK(rprppContextWaitQueueIdle(m_context));
     }
 
-    inline RprPpVkPhysicalDevice getVkPhysicalDevice() const noexcept
+    inline VkPhysicalDevice getVkPhysicalDevice() const noexcept
     {
         RprPpVkPhysicalDevice vkhandle = nullptr;
         RPRPP_CHECK(rprppContextGetVkPhysicalDevice(m_context, &vkhandle));
-        return vkhandle;
+        return static_cast<VkPhysicalDevice>(vkhandle);
     }
 
-    inline RprPpVkDevice getVkDevice() const noexcept
+    inline VkDevice getVkDevice() const noexcept
     {
         RprPpVkDevice vkhandle = nullptr;
         RPRPP_CHECK(rprppContextGetVkDevice(m_context, &vkhandle));
-        return vkhandle;
+        return static_cast<VkDevice>(vkhandle);
     }
 
-    inline RprPpVkQueue getVkQueue() const noexcept
+    inline VkQueue getVkQueue() const noexcept
     {
         RprPpVkQueue vkhandle = nullptr;
         RPRPP_CHECK(rprppContextGetVkQueue(m_context, &vkhandle));
-        return vkhandle;
+        return static_cast<VkQueue>(vkhandle);
     }
 
     inline void copyStagingBufferToAovColor()

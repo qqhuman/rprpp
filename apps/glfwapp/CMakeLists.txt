@@ -11,11 +11,14 @@ set(GLFW_INSTALL OFF CACHE INTERNAL "Glfw install")
 FetchContent_MakeAvailable(glfw)
 
 set(HEADERS
-    Dx11App.h
+    dx_helper.h
+    NoAovsInteropApp.h
+    WithAovsInteropApp.h
 )
 
 set(SOURCES
-    Dx11App.cpp
+    NoAovsInteropApp.cpp
+    WithAovsInteropApp.cpp
 )
 add_executable(glfwapp ${SOURCES} ${HEADERS} main.cpp)
 

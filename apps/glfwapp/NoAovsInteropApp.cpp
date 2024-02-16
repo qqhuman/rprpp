@@ -1,4 +1,4 @@
-#include "Dx11App.h"
+#include "NoAovsInteropApp.h"
 
 #define FORMAT DXGI_FORMAT_R8G8B8A8_UNORM
 
@@ -12,7 +12,7 @@ inline RprPpImageFormat to_rprppformat(DXGI_FORMAT format)
     }
 }
 
-Dx11App::Dx11App(int width, int height, Paths paths, GpuIndices gpuIndices)
+NoAovsInteropApp::NoAovsInteropApp(int width, int height, Paths paths, GpuIndices gpuIndices)
     : m_width(width)
     , m_height(height)
     , m_paths(paths)
@@ -20,42 +20,44 @@ Dx11App::Dx11App(int width, int height, Paths paths, GpuIndices gpuIndices)
     , m_postProcessing(gpuIndices.vk)
     , m_hybridproRenderer(gpuIndices.vk, std::nullopt, paths.hybridproDll, paths.hybridproCacheDir, paths.assetsDir)
 {
+    std::cout << "NoAovsInteropApp()" << std::endl;
 }
 
-Dx11App::~Dx11App()
+NoAovsInteropApp::~NoAovsInteropApp()
 {
+    std::cout << "~NoAovsInteropApp()" << std::endl;
     glfwDestroyWindow(m_window);
     glfwTerminate();
 }
 
-void Dx11App::run()
+void NoAovsInteropApp::run()
 {
     initWindow();
     findAdapter();
-    intiDx11();
+    intiSwapChain();
+    resize(m_width, m_height);
     mainLoop();
 }
 
-void Dx11App::initWindow()
+void NoAovsInteropApp::initWindow()
 {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     m_window = glfwCreateWindow(m_width, m_height, "VkDx11 Interop", nullptr, nullptr);
     m_hWnd = glfwGetWin32Window(m_window);
-    glfwSetFramebufferSizeCallback(m_window, Dx11App::onResize);
+    glfwSetFramebufferSizeCallback(m_window, NoAovsInteropApp::onResize);
     glfwSetWindowUserPointer(m_window, this);
 }
 
-void Dx11App::findAdapter()
+void NoAovsInteropApp::findAdapter()
 {
     ComPtr<IDXGIFactory4> factory;
     DX_CHECK(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
     ComPtr<IDXGIFactory6> factory6;
     DX_CHECK(factory->QueryInterface(IID_PPV_ARGS(&factory6)));
 
-    std::cout << "[dx11app.h] "
-              << "All Adapters:" << std::endl;
+    std::cout << "All DXGI Adapters:" << std::endl;
 
     ComPtr<IDXGIAdapter1> tmpAdapter;
     DXGI_ADAPTER_DESC selectedAdapterDesc;
@@ -66,8 +68,7 @@ void Dx11App::findAdapter()
         DXGI_ADAPTER_DESC desc;
         tmpAdapter->GetDesc(&desc);
 
-        std::wcout << "[dx11app.h] "
-                   << "\t" << adapterIndex << ". " << desc.Description << std::endl;
+        std::wcout << "\t" << adapterIndex << ". " << desc.Description << std::endl;
 
         if (adapterIndex == m_gpuIndices.dx11) {
             m_adapter = tmpAdapter;
@@ -76,14 +77,13 @@ void Dx11App::findAdapter()
     }
 
     if (adapterCount <= m_gpuIndices.dx11) {
-        throw std::runtime_error("[dx11app.h] could not find a IDXGIAdapter1, gpuIndices.dx11 is out of range");
+        throw std::runtime_error("could not find a IDXGIAdapter1, gpuIndices.dx11 is out of range");
     }
 
-    std::wcout << "[dx11app.h] "
-               << "Selected adapter: " << selectedAdapterDesc.Description << std::endl;
+    std::wcout << "Selected adapter: " << selectedAdapterDesc.Description << std::endl;
 }
 
-void Dx11App::intiDx11()
+void NoAovsInteropApp::intiSwapChain()
 {
     DXGI_SWAP_CHAIN_DESC scd = {};
     ZeroMemory(&scd, sizeof(DXGI_SWAP_CHAIN_DESC));
@@ -109,10 +109,9 @@ void Dx11App::intiDx11()
         &m_device,
         nullptr,
         &m_deviceContex));
-    resize(m_width, m_height);
 }
 
-void Dx11App::resize(int width, int height)
+void NoAovsInteropApp::resize(int width, int height)
 {
     if (m_width != width || m_height != height || m_backBuffer.Get() == nullptr) {
         m_deviceContex->OMSetRenderTargets(0, nullptr, nullptr);
@@ -155,13 +154,13 @@ void Dx11App::resize(int width, int height)
     }
 }
 
-void Dx11App::onResize(GLFWwindow* window, int width, int height)
+void NoAovsInteropApp::onResize(GLFWwindow* window, int width, int height)
 {
-    auto app = static_cast<Dx11App*>(glfwGetWindowUserPointer(window));
+    auto app = static_cast<NoAovsInteropApp*>(glfwGetWindowUserPointer(window));
     app->resize(width, height);
 }
 
-void Dx11App::copyRprFbToPpStagingBuffer(rpr_aov aov)
+void NoAovsInteropApp::copyRprFbToPpStagingBuffer(rpr_aov aov)
 {
     size_t size;
     m_hybridproRenderer.getAov(aov, nullptr, 0u, &size);
@@ -170,7 +169,7 @@ void Dx11App::copyRprFbToPpStagingBuffer(rpr_aov aov)
     m_postProcessing.unmapStagingBuffer();
 }
 
-void Dx11App::mainLoop()
+void NoAovsInteropApp::mainLoop()
 {
     clock_t deltaTime = 0;
     unsigned int frames = 0;

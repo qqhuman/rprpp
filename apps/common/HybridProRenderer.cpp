@@ -10,7 +10,7 @@ HybridProRenderer::HybridProRenderer(int deviceId,
     const std::filesystem::path& assetsDir)
     : m_interopInfo(interopInfo)
 {
-    std::cout << "[HybridProRenderer] HybridProRenderer()" << std::endl;
+    std::cout << "HybridProRenderer()" << std::endl;
 
     std::vector<rpr_context_properties> properties;
     rpr_creation_flags creation_flags = intToRprCreationFlag(deviceId);
@@ -192,7 +192,7 @@ HybridProRenderer::HybridProRenderer(int deviceId,
 
 HybridProRenderer::~HybridProRenderer()
 {
-    std::cout << "[HybridProRenderer] ~HybridProRenderer()" << std::endl;
+    std::cout << "~HybridProRenderer()" << std::endl;
     RPR_CHECK(rprSceneDetachLight(m_scene, m_light));
     RPR_CHECK(rprSceneDetachShape(m_scene, m_teapot));
     for (auto& aov : m_aovs) {
