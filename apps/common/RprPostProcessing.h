@@ -16,7 +16,7 @@ public:
         RPRPP_CHECK(rprppCreateContext(deviceId, &m_context));
     }
 
-    RprPostProcessing(RprPostProcessing&& other)
+    RprPostProcessing(RprPostProcessing&& other) noexcept
     {
         m_context = other.m_context;
         other.m_context = nullptr;
@@ -39,9 +39,14 @@ public:
         RPRPP_CHECK(rprppContextUnmapStagingBuffer(m_context));
     }
 
-    inline void resize(uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle sharedDx11TextureHandle = nullptr)
+    inline void setFramesInFlihgt(uint32_t framesInFlight)
     {
-        RPRPP_CHECK(rprppContextResize(m_context, width, height, format, sharedDx11TextureHandle));
+        RPRPP_CHECK(rprppContextSetFramesInFlihgt(m_context, framesInFlight));
+    }
+
+    inline void resize(uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle outputDx11TextureHandle = nullptr, RprPpAovsVkInteropInfo* aovsVkInteropInfo = nullptr)
+    {
+        RPRPP_CHECK(rprppContextResize(m_context, width, height, format, outputDx11TextureHandle, aovsVkInteropInfo));
     }
 
     inline void getOutput(uint8_t* dst, size_t size, size_t* retSize)
@@ -49,22 +54,34 @@ public:
         RPRPP_CHECK(rprppContextGetOutput(m_context, dst, size, retSize));
     }
 
-    inline void run()
+    inline void run(RprPpVkSemaphore aovsReadySemaphore = nullptr, RprPpVkSemaphore toSignalAfterProcessingSemaphore = nullptr)
     {
-        RPRPP_CHECK(rprppContextRun(m_context));
+        RPRPP_CHECK(rprppContextRun(m_context, aovsReadySemaphore, toSignalAfterProcessingSemaphore));
     }
 
-    inline RprPpVkHandle getVkPhysicalDevice() const noexcept
+    inline void waitQueueIdle()
     {
-        RprPpVkHandle vkhandle = nullptr;
+        RPRPP_CHECK(rprppContextWaitQueueIdle(m_context));
+    }
+
+    inline RprPpVkPhysicalDevice getVkPhysicalDevice() const noexcept
+    {
+        RprPpVkPhysicalDevice vkhandle = nullptr;
         RPRPP_CHECK(rprppContextGetVkPhysicalDevice(m_context, &vkhandle));
         return vkhandle;
     }
 
-    inline RprPpVkHandle getVkDevice() const noexcept
+    inline RprPpVkDevice getVkDevice() const noexcept
     {
-        RprPpVkHandle vkhandle = nullptr;
+        RprPpVkDevice vkhandle = nullptr;
         RPRPP_CHECK(rprppContextGetVkDevice(m_context, &vkhandle));
+        return vkhandle;
+    }
+
+    inline RprPpVkQueue getVkQueue() const noexcept
+    {
+        RprPpVkQueue vkhandle = nullptr;
+        RPRPP_CHECK(rprppContextGetVkQueue(m_context, &vkhandle));
         return vkhandle;
     }
 

@@ -18,7 +18,7 @@ Dx11App::Dx11App(int width, int height, Paths paths, GpuIndices gpuIndices)
     , m_paths(paths)
     , m_gpuIndices(gpuIndices)
     , m_postProcessing(gpuIndices.vk)
-    , m_hybridproRenderer(m_width, m_height, gpuIndices.vk, paths.hybridproDll, paths.hybridproCacheDir, paths.assetsDir)
+    , m_hybridproRenderer(gpuIndices.vk, std::nullopt, paths.hybridproDll, paths.hybridproCacheDir, paths.assetsDir)
 {
 }
 
@@ -175,11 +175,13 @@ void Dx11App::mainLoop()
     clock_t deltaTime = 0;
     unsigned int frames = 0;
     while (!glfwWindowShouldClose(m_window)) {
-        const rpr_uint renderedIterations = 1;
+        unsigned int renderedIterations = 1;
         clock_t beginFrame = clock();
         {
             glfwPollEvents();
-            m_hybridproRenderer.render(renderedIterations);
+            for (unsigned int i = 0; i < renderedIterations; i++) {
+                m_hybridproRenderer.render();
+            }
             copyRprFbToPpStagingBuffer(RPR_AOV_COLOR);
             m_postProcessing.copyStagingBufferToAovColor();
             copyRprFbToPpStagingBuffer(RPR_AOV_OPACITY);
@@ -193,6 +195,7 @@ void Dx11App::mainLoop()
             copyRprFbToPpStagingBuffer(RPR_AOV_BACKGROUND);
             m_postProcessing.copyStagingBufferToAovBackground();
             m_postProcessing.run();
+            m_postProcessing.waitQueueIdle();
 
             IDXGIKeyedMutex* km;
             DX_CHECK(m_sharedTextureResource->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&km));

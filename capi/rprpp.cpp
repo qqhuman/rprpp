@@ -9,6 +9,7 @@
 #include <concepts>
 #include <cassert>
 #include <functional>
+#include <optional>
 
 #include <iostream>
 
@@ -97,7 +98,7 @@ RprPpError rprppContextGetOutput(RprPpContext context, uint8_t* dst, size_t size
     return RPRPP_SUCCESS;
 }
 
-RprPpError rprppContextGetVkPhysicalDevice(RprPpContext context, RprPpVkHandle* physicalDevice)
+RprPpError rprppContextGetVkPhysicalDevice(RprPpContext context, RprPpVkPhysicalDevice* physicalDevice)
 {
     assert(context);
     assert(physicalDevice);
@@ -111,7 +112,7 @@ RprPpError rprppContextGetVkPhysicalDevice(RprPpContext context, RprPpVkHandle* 
 	return RPRPP_SUCCESS;
 }
 
-RprPpError rprppContextGetVkDevice(RprPpContext context, RprPpVkHandle* device)
+RprPpError rprppContextGetVkDevice(RprPpContext context, RprPpVkDevice* device)
 {
 	assert(context);
 	assert(device);
@@ -125,26 +126,79 @@ RprPpError rprppContextGetVkDevice(RprPpContext context, RprPpVkHandle* device)
     return RPRPP_SUCCESS;
 }
 
-RprPpError rprppContextResize(RprPpContext context, uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle sharedDx11TextureHandle)
+RprPpError rprppContextGetVkQueue(RprPpContext context, RprPpVkQueue* queue)
+{
+	assert(context);
+	assert(queue);
+
+    auto result = safeCall([&] {
+        rprpp::PostProcessing* pp = static_cast<rprpp::PostProcessing*>(context);
+        *queue = pp->getVkQueue();
+    });
+    check(result);
+    
+    return RPRPP_SUCCESS;
+}
+
+RPRPP_API RprPpError rprppContextSetFramesInFlihgt(RprPpContext context, uint32_t framesInFlight)
 {
     assert(context);
 
     auto result = safeCall([&] {
         rprpp::PostProcessing* pp = static_cast<rprpp::PostProcessing*>(context);
-        pp->resize(width, height, static_cast<rprpp::ImageFormat>(format), sharedDx11TextureHandle);
+        pp->setFramesInFlihgt(framesInFlight);
+    });
+    check(result);
+
+    return RPRPP_SUCCESS;
+}
+
+RprPpError rprppContextResize(RprPpContext context, uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle outputDx11TextureHandle, RprPpAovsVkInteropInfo* pAovsVkInterop)
+{
+    assert(context);
+
+    auto result = safeCall([&] {
+        rprpp::PostProcessing* pp = static_cast<rprpp::PostProcessing*>(context);
+
+        std::optional<rprpp::AovsVkInteropInfo> aovsVkInteropInfo;
+        if (pAovsVkInterop != nullptr) {
+            aovsVkInteropInfo = {
+                .color = static_cast<VkImage>(pAovsVkInterop->color),
+                .opacity = static_cast<VkImage>(pAovsVkInterop->opacity),
+                .shadowCatcher = static_cast<VkImage>(pAovsVkInterop->shadowCatcher),
+                .reflectionCatcher = static_cast<VkImage>(pAovsVkInterop->reflectionCatcher),
+                .mattePass = static_cast<VkImage>(pAovsVkInterop->mattePass),
+                .background = static_cast<VkImage>(pAovsVkInterop->background),
+            };
+        }
+
+        pp->resize(width, height, static_cast<rprpp::ImageFormat>(format), outputDx11TextureHandle, aovsVkInteropInfo);
     });
     check(result);
 
    return RPRPP_SUCCESS;
 }
 
-RprPpError rprppContextRun(RprPpContext context)
+RprPpError rprppContextRun(RprPpContext context, RprPpVkSemaphore aovsReadySemaphore, RprPpVkSemaphore toSignalAfterProcessingSemaphore)
 {
     assert(context);
 
     auto result = safeCall([&] {
         rprpp::PostProcessing* pp = static_cast<rprpp::PostProcessing*>(context);
-        pp->run();
+        pp->run(static_cast<VkSemaphore>(aovsReadySemaphore), static_cast<VkSemaphore>(toSignalAfterProcessingSemaphore));
+    });
+    check(result);
+
+    return RPRPP_SUCCESS;
+}
+
+RprPpError rprppContextWaitQueueIdle(RprPpContext context)
+{
+    assert(context);
+
+    auto result = safeCall([&] {
+        rprpp::PostProcessing* pp = static_cast<rprpp::PostProcessing*>(context);
+        pp->waitQueueIdle();
     });
     check(result);
 

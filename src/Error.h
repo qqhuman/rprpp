@@ -34,4 +34,9 @@ public:
     explicit ShaderCompilationError(const std::string& message);
 };
 
+class InvalidOperation : public Error {
+public:
+    explicit InvalidOperation(const std::string& message);
+};
+
 }

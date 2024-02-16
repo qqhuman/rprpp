@@ -1,5 +1,14 @@
 #include "rpr_helper.h"
 
+void ErrorManager(VkResult result, const char* fileName, int line)
+{
+    std::cerr << "ERROR detected - program will stop." << std::endl;
+    std::cerr << "file = " << fileName << std::endl;
+    std::cerr << "line = " << line << std::endl;
+    std::cerr << "Vk result = " << result << std::endl;
+    assert(0);
+}
+
 void ErrorManager(rpr_status errorCode, const char* fileName, int line)
 {
     std::cerr << "ERROR detected - program will stop." << std::endl;

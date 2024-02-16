@@ -22,6 +22,7 @@ typedef enum RprPpError {
     RPRPP_ERROR_INVALID_DEVICE = 2,
     RPRPP_ERROR_INVALID_PARAMETER = 3,
     RPRPP_ERROR_SHADER_COMPILATION = 4,
+    RPRPP_ERROR_INVALID_OPERATION = 5,
 } RprPpError;
 
 typedef enum RprPpDeviceInfo {
@@ -35,7 +36,20 @@ typedef enum RprPpImageFormat {
 
 typedef void* RprPpContext;
 typedef void* RprPpDx11Handle;
-typedef void* RprPpVkHandle;
+typedef void* RprPpVkSemaphore;
+typedef void* RprPpVkPhysicalDevice;
+typedef void* RprPpVkDevice;
+typedef void* RprPpVkQueue;
+typedef void* RprPpVkImage;
+
+typedef struct RprPpAovsVkInteropInfo {
+    RprPpVkImage color;
+    RprPpVkImage opacity;
+    RprPpVkImage shadowCatcher;
+    RprPpVkImage reflectionCatcher;
+    RprPpVkImage mattePass;
+    RprPpVkImage background;
+} RprPpVkInteropAovs;
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,10 +62,13 @@ RPRPP_API RprPpError rprppCreateContext(uint32_t deviceId, RprPpContext* outCont
 RPRPP_API RprPpError rprppDestroyContext(RprPpContext context);
 
 RPRPP_API RprPpError rprppContextGetOutput(RprPpContext context, uint8_t* dst, size_t size, size_t* retSize);
-RPRPP_API RprPpError rprppContextGetVkPhysicalDevice(RprPpContext context, RprPpVkHandle* physicalDevice);
-RPRPP_API RprPpError rprppContextGetVkDevice(RprPpContext context, RprPpVkHandle* device);
-RPRPP_API RprPpError rprppContextResize(RprPpContext context, uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle sharedDx11TextureHandle);
-RPRPP_API RprPpError rprppContextRun(RprPpContext context);
+RPRPP_API RprPpError rprppContextGetVkPhysicalDevice(RprPpContext context, RprPpVkPhysicalDevice* physicalDevice);
+RPRPP_API RprPpError rprppContextGetVkDevice(RprPpContext context, RprPpVkDevice* device);
+RPRPP_API RprPpError rprppContextGetVkQueue(RprPpContext context, RprPpVkQueue* queue);
+RPRPP_API RprPpError rprppContextSetFramesInFlihgt(RprPpContext context, uint32_t framesInFlight);
+RPRPP_API RprPpError rprppContextResize(RprPpContext context, uint32_t width, uint32_t height, RprPpImageFormat format, RprPpDx11Handle outputDx11TextureHandle, RprPpAovsVkInteropInfo* aovsVkInteropInfo);
+RPRPP_API RprPpError rprppContextRun(RprPpContext context, RprPpVkSemaphore aovsReadySemaphore, RprPpVkSemaphore toSignalAfterProcessingSemaphore);
+RPRPP_API RprPpError rprppContextWaitQueueIdle(RprPpContext context);
 
 RPRPP_API RprPpError rprppContextMapStagingBuffer(RprPpContext context, size_t size, void** data);
 RPRPP_API RprPpError rprppContextUnmapStagingBuffer(RprPpContext context);

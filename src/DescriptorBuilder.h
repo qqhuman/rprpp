@@ -46,6 +46,27 @@ public:
         ++m_poolSizes[type];
     }
 
+    void bindCombinedImageSampler(vk::DescriptorImageInfo* imageInfo)
+    {
+        uint32_t bindingIndex = static_cast<uint32_t>(bindings.size());
+        vk::DescriptorType type = vk::DescriptorType::eCombinedImageSampler;
+        vk::DescriptorSetLayoutBinding binding;
+        binding.binding = bindingIndex;
+        binding.descriptorType = type;
+        binding.descriptorCount = 1;
+        binding.stageFlags = vk::ShaderStageFlagBits::eCompute;
+        bindings.push_back(binding);
+
+        vk::WriteDescriptorSet write;
+        write.dstBinding = bindingIndex;
+        write.descriptorCount = 1;
+        write.descriptorType = type;
+        write.pImageInfo = imageInfo;
+        writes.push_back(write);
+
+        ++m_poolSizes[type];
+    }
+
     void bindUniformBuffer(vk::DescriptorBufferInfo* bufferInfo)
     {
         uint32_t bindingIndex = static_cast<uint32_t>(bindings.size());

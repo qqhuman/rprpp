@@ -5,11 +5,34 @@
 #include "vk_helper.h"
 #include <optional>
 #include <vector>
+#include <variant>
 
 namespace rprpp {
 
 const int WorkgroupSize = 32;
 const int NumComponents = 4;
+
+struct AovsVkInteropInfo {
+    VkImage color;
+    VkImage opacity;
+    VkImage shadowCatcher;
+    VkImage reflectionCatcher;
+    VkImage mattePass;
+    VkImage background;
+
+    friend bool operator==(const AovsVkInteropInfo&, const AovsVkInteropInfo&) = default;
+    friend bool operator!=(const AovsVkInteropInfo&, const AovsVkInteropInfo&) = default;
+};
+
+struct InteropAovs {
+    vk::raii::ImageView color;
+    vk::raii::ImageView opacity;
+    vk::raii::ImageView shadowCatcher;
+    vk::raii::ImageView reflectionCatcher;
+    vk::raii::ImageView mattePass;
+    vk::raii::ImageView background;
+    vk::raii::Sampler sampler;
+};
 
 struct Aovs {
     vk::helper::Image color;
@@ -54,10 +77,13 @@ struct UniformBufferObject {
 
 class PostProcessing {
 private:
-    HANDLE m_sharedDx11TextureHandle = nullptr;
     uint32_t m_width = 0;
     uint32_t m_height = 0;
+    uint32_t m_fenceIndex = 0;
+    uint32_t m_framesInFlight = 0;
+    HANDLE m_outputDx11TextureHandle = nullptr;
     ImageFormat m_outputImageFormat = ImageFormat::eR32G32B32A32Sfloat;
+    std::optional<AovsVkInteropInfo> m_aovsVkInteropInfo;
     bool m_uboDirty = true;
     UniformBufferObject m_ubo;
     std::vector<const char*> m_enabledLayers;
@@ -70,15 +96,16 @@ private:
     std::optional<vk::raii::ShaderModule> m_shaderModule;
     std::optional<vk::helper::Buffer> m_stagingBuffer;
     std::optional<vk::helper::Image> m_outputImage;
-    std::optional<Aovs> m_aovs;
+    std::optional<std::variant<Aovs, InteropAovs>> m_aovs;
     std::optional<vk::raii::DescriptorSetLayout> m_descriptorSetLayout;
     std::optional<vk::raii::DescriptorPool> m_descriptorPool;
     std::optional<vk::raii::DescriptorSet> m_descriptorSet;
     std::optional<vk::raii::PipelineLayout> m_pipelineLayout;
     std::optional<vk::raii::Pipeline> m_computePipeline;
-    void createShaderModule(ImageFormat outputFormat);
+    std::vector<vk::raii::Fence> m_fences;
+    void createShaderModule(ImageFormat outputFormat, bool sampledAovs);
     void createDescriptorSet();
-    void createImages(uint32_t width, uint32_t height, ImageFormat outputFormat, HANDLE sharedDx11TextureHandle);
+    void createImages(uint32_t width, uint32_t height, ImageFormat outputFormat, HANDLE outputDx11TextureHandle, std::optional<AovsVkInteropInfo> aovsVkInteropInfo);
     void createComputePipeline();
     void recordComputeCommandBuffer(uint32_t width, uint32_t height);
     void transitionImageLayout(vk::helper::Image& image,
@@ -101,9 +128,17 @@ public:
     static PostProcessing* create(uint32_t deviceId);
     void* mapStagingBuffer(size_t size);
     void unmapStagingBuffer();
-    void resize(uint32_t width, uint32_t height, ImageFormat format, HANDLE sharedDx11TextureHandle = nullptr);
+    void copyStagingBufferToAovColor();
+    void copyStagingBufferToAovOpacity();
+    void copyStagingBufferToAovShadowCatcher();
+    void copyStagingBufferToAovReflectionCatcher();
+    void copyStagingBufferToAovMattePass();
+    void copyStagingBufferToAovBackground();
+    void setFramesInFlihgt(uint32_t framesInFlight);
+    void resize(uint32_t width, uint32_t height, ImageFormat format, HANDLE outputDx11TextureHandle, std::optional<AovsVkInteropInfo> aovsVkInteropInfo);
     void getOutput(uint8_t* dst, size_t size, size_t* retSize);
-    void run();
+    void run(VkSemaphore aovsReadySemaphore, VkSemaphore toSignalAfterProcessingSemaphore);
+    void waitQueueIdle();
 
     inline VkPhysicalDevice getVkPhysicalDevice() const noexcept
     {
@@ -115,34 +150,9 @@ public:
         return static_cast<VkDevice>(*m_dctx.device);
     }
 
-    inline void copyStagingBufferToAovColor()
+    inline VkQueue getVkQueue() const noexcept
     {
-        copyStagingBufferToAov(m_aovs.value().color);
-    }
-
-    inline void copyStagingBufferToAovOpacity()
-    {
-        copyStagingBufferToAov(m_aovs.value().opacity);
-    }
-
-    inline void copyStagingBufferToAovShadowCatcher()
-    {
-        copyStagingBufferToAov(m_aovs.value().shadowCatcher);
-    }
-
-    inline void copyStagingBufferToAovReflectionCatcher()
-    {
-        copyStagingBufferToAov(m_aovs.value().reflectionCatcher);
-    }
-
-    inline void copyStagingBufferToAovMattePass()
-    {
-        copyStagingBufferToAov(m_aovs.value().mattePass);
-    }
-
-    inline void copyStagingBufferToAovBackground()
-    {
-        copyStagingBufferToAov(m_aovs.value().background);
+        return static_cast<VkQueue>(*m_dctx.queue);
     }
 
     inline void setGamma(float gamma) noexcept

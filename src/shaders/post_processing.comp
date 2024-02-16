@@ -2,6 +2,7 @@
 // these defs are provided by shaderc lib
 // #define WORKGROUP_SIZE 32
 // #define OUTPUT_FORMAT rgba8/rgba32f provided by shaderc lib
+// #define AOVS_ARE_SAMPLED_IMAGES
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1) in;
 
 struct ToneMap {
@@ -31,12 +32,23 @@ struct Bloom
 };
 
 layout (set = 0, binding = 0, OUTPUT_FORMAT) uniform image2D outputBuffer;
+#if AOVS_ARE_SAMPLED_IMAGES
+layout (set = 0, binding = 1) uniform sampler2D aovColor;
+layout (set = 0, binding = 2) uniform sampler2D aovOpacity;
+layout (set = 0, binding = 3) uniform sampler2D aovShadowCatcher;
+layout (set = 0, binding = 4) uniform sampler2D aovReflectionCatcher;
+layout (set = 0, binding = 5) uniform sampler2D aovMattePass;
+layout (set = 0, binding = 6) uniform sampler2D aovBackground;
+#define LOAD_AOV(texSampler, xy) texture(texSampler, vec2((float(xy.x) + 0.5f) / imageSize(outputBuffer).x, (float(xy.y) + 0.5f) / imageSize(outputBuffer).y))
+#else
 layout (set = 0, binding = 1, rgba32f) uniform readonly image2D aovColor;
 layout (set = 0, binding = 2, rgba32f) uniform readonly image2D aovOpacity;
 layout (set = 0, binding = 3, rgba32f) uniform readonly image2D aovShadowCatcher;
 layout (set = 0, binding = 4, rgba32f) uniform readonly image2D aovReflectionCatcher;
 layout (set = 0, binding = 5, rgba32f) uniform readonly image2D aovMattePass;
 layout (set = 0, binding = 6, rgba32f) uniform readonly image2D aovBackground;
+#define LOAD_AOV(img, xy) imageLoad(img, xy)
+#endif
 layout (set = 0, binding = 7) uniform UBO 
 {
 	ToneMap tonemap;
@@ -58,12 +70,12 @@ vec4 clamp4(vec4 val, float minVal, float maxVal)
 
 vec4 compose(ivec2 xy)
 {
-    vec4 color = imageLoad(aovColor, xy);
-    float opacity = imageLoad(aovOpacity, xy).x;
-    float shadow = min(ubo.shadowIntensity * imageLoad(aovShadowCatcher, xy).x, 1.0f);
-    float reflection = imageLoad(aovReflectionCatcher, xy).x;
-    vec4 mattePass = imageLoad(aovMattePass, xy);
-    vec4 background = imageLoad(aovBackground, xy);
+    vec4 color = LOAD_AOV(aovColor, xy);
+    float opacity = LOAD_AOV(aovOpacity, xy).x;
+    float shadow = min(ubo.shadowIntensity * LOAD_AOV(aovShadowCatcher, xy).x, 1.0f);
+    float reflection = LOAD_AOV(aovReflectionCatcher, xy).x;
+    vec4 mattePass = LOAD_AOV(aovMattePass, xy);
+    vec4 background = LOAD_AOV(aovBackground, xy);
 
     vec4 colorSubMatte = clamp4(color - mattePass, 0.0f, 1.0f);
     mattePass = background * (1.0f - min(opacity + reflection, 1.0f)) + mattePass;

@@ -46,7 +46,7 @@ Image createImage(const DeviceContext& dctx,
     uint32_t height,
     vk::Format format,
     vk::ImageUsageFlags usage,
-    HANDLE sharedDx11TextureHandle = nullptr);
+    HANDLE outputDx11TextureHandle = nullptr);
 
 Buffer createBuffer(const DeviceContext& dctx,
     vk::DeviceSize size,

@@ -3,53 +3,34 @@
 #include <RadeonProRender_VK.h>
 #include <set>
 
-inline constexpr int FramesInFlight = 3;
-
-HybridProRenderer::HybridProRenderer(uint32_t width,
-        uint32_t height,
-        int deviceId,
-        const std::filesystem::path& hybridproDll,
-        const std::filesystem::path& hybridproCacheDir,
-        const std::filesystem::path& assetsDir)
+HybridProRenderer::HybridProRenderer(int deviceId,
+    const std::optional<HybridProInteropInfo>& interopInfo,
+    const std::filesystem::path& hybridproDll,
+    const std::filesystem::path& hybridproCacheDir,
+    const std::filesystem::path& assetsDir)
+    : m_interopInfo(interopInfo)
 {
     std::cout << "[HybridProRenderer] HybridProRenderer()" << std::endl;
 
     std::vector<rpr_context_properties> properties;
     rpr_creation_flags creation_flags = intToRprCreationFlag(deviceId);
 
-    // std::vector<VkSemaphore> releaseSemaphores;
-    // releaseSemaphores.reserve(FramesInFlight);
-    // m_semaphores.resize(FramesInFlight);
-    // for (size_t i = 0; i < FramesInFlight; i++) {
-    //     VkSemaphoreCreateInfo semaphoreInfo {};
-    //     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    VkInteropInfo::VkInstance instance_;
+    VkInteropInfo interopInfo_;
 
-    //     VkFenceCreateInfo fenceInfo {};
-    //     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    //     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    if (m_interopInfo.has_value()) {
+        instance_.physical_device = m_interopInfo.value().physicalDevice;
+        instance_.device = m_interopInfo.value().device;
 
-    //     VK_CHECK(vkCreateSemaphore(m_postProcessing->getVkDevice(), &semaphoreInfo, nullptr, &m_semaphores[i].ready));
-    //     VK_CHECK(vkCreateSemaphore(m_postProcessing->getVkDevice(), &semaphoreInfo, nullptr, &m_semaphores[i].release));
-    //     VK_CHECK(vkCreateFence(m_postProcessing->getVkDevice(), &fenceInfo, nullptr, &m_semaphores[i].fence));
-    //     releaseSemaphores.push_back(m_semaphores[i].release);
-    // }
-
-    // VkInteropInfo::VkInstance instance = {
-    //     m_postProcessing->getVkPhysicalDevice(),
-    //     m_postProcessing->getVkDevice()
-    // };
-
-    // VkInteropInfo interopInfo = {
-    //     .instance_count = 1,
-    //     .main_instance_index = 0,
-    //     .frames_in_flight = FramesInFlight,
-    //     .framebuffers_release_semaphores = releaseSemaphores.data(),
-    //     .instances = &instance,
-    // };
-
-    // creation_flags |= RPR_CREATION_FLAGS_ENABLE_VK_INTEROP;
-    // properties.push_back((rpr_context_properties)RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO);
-    // properties.push_back((rpr_context_properties)&interopInfo);
+        interopInfo_.instance_count = 1,
+        interopInfo_.instances = &instance_;
+        interopInfo_.main_instance_index = 0,
+        interopInfo_.frames_in_flight = m_interopInfo.value().framesInFlight,
+        interopInfo_.framebuffers_release_semaphores = m_interopInfo.value().frameBuffersReleaseSemaphores;
+        properties.push_back((rpr_context_properties)RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO);
+        properties.push_back((rpr_context_properties)&interopInfo_);
+        creation_flags = RPR_CREATION_FLAGS_ENABLE_VK_INTEROP;
+    }
 
     properties.push_back(0);
 
@@ -68,6 +49,20 @@ HybridProRenderer::HybridProRenderer(uint32_t width,
     RPR_CHECK(rprContextSetParameterByKey1u(m_context, RPR_CONTEXT_IBL_DISPLAY, RPR_FALSE));
     RPR_CHECK(rprContextSetParameterByKey1u(m_context, RPR_CONTEXT_MAX_RECURSION, 10));
     RPR_CHECK(rprContextSetParameterByKey1f(m_context, RPR_CONTEXT_DISPLAY_GAMMA, 1.0f));
+    RPR_CHECK(rprContextSetParameterByKey1u(m_context, RPR_CONTEXT_ITERATIONS, 1));
+
+    if (m_interopInfo.has_value()) {
+        m_frameBuffersReadySemaphores.resize(m_interopInfo.value().framesInFlight);
+        RPR_CHECK(rprContextGetInfo(m_context,
+            (rpr_context_info)RPR_CONTEXT_FRAMEBUFFERS_READY_SEMAPHORES,
+            sizeof(VkSemaphore) * m_interopInfo.value().framesInFlight,
+            m_frameBuffersReadySemaphores.data(),
+            nullptr));
+    }
+
+    RPR_CHECK(rprContextGetFunctionPtr(m_context,
+        RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME,
+        (void**)(&rprContextFlushFrameBuffers)));
 
     RPR_CHECK(rprContextCreateScene(m_context, &m_scene));
     RPR_CHECK(rprContextSetScene(m_context, m_scene));
@@ -193,8 +188,6 @@ HybridProRenderer::HybridProRenderer(uint32_t width,
         RPR_CHECK(rprLightSetTransform(m_light, false, (rpr_float*)&float_P16_4));
         RPR_CHECK(rprSceneSetEnvironmentLight(m_scene, m_light));
     }
-
-    resize(width, height);
 }
 
 HybridProRenderer::~HybridProRenderer()
@@ -277,10 +270,54 @@ void HybridProRenderer::resize(uint32_t width, uint32_t height)
     }
 }
 
-void HybridProRenderer::render(uint32_t iterations)
+void HybridProRenderer::render()
 {
-    RPR_CHECK(rprContextSetParameterByKey1u(m_context, RPR_CONTEXT_ITERATIONS, iterations));
     RPR_CHECK(rprContextRender(m_context));
+}
+
+std::vector<VkSemaphore> HybridProRenderer::getFrameBuffersReadySemaphores()
+{
+    if (!m_interopInfo.has_value()) {
+        throw std::runtime_error("getFrameBuffersReadySemaphores is unavailable without vulkan interop");
+    }
+
+    return m_frameBuffersReadySemaphores;
+}
+
+uint32_t HybridProRenderer::getSemaphoreIndex()
+{
+    if (!m_interopInfo.has_value()) {
+        throw std::runtime_error("getSemaphoreIndex is unavailable without vulkan interop");
+    }
+
+    std::uint32_t semaphoreIndex = 0;
+    RPR_CHECK(rprContextGetInfo(m_context,
+        (rpr_context_info)RPR_CONTEXT_INTEROP_SEMAPHORE_INDEX,
+        sizeof(semaphoreIndex),
+        &semaphoreIndex,
+        nullptr));
+
+    return semaphoreIndex;
+}
+
+void HybridProRenderer::flushFrameBuffers()
+{
+    if (!m_interopInfo.has_value()) {
+        throw std::runtime_error("flushFrameBuffers is unavailable without vulkan interop");
+    }
+
+    RPR_CHECK(rprContextFlushFrameBuffers(m_context));
+}
+
+VkImage HybridProRenderer::getAovVkImage(rpr_aov aov)
+{
+    if (!m_interopInfo.has_value()) {
+        throw std::runtime_error("getAovVkImage is unavailable without vulkan interop");
+    }
+
+    VkImage image;
+    RPR_CHECK(rprFrameBufferGetInfo(getAov(aov), (rpr_framebuffer_info)RPR_VK_IMAGE_OBJECT, sizeof(VkImage), &image, 0));
+    return image;
 }
 
 float HybridProRenderer::getFocalLength()
@@ -290,10 +327,11 @@ float HybridProRenderer::getFocalLength()
     return focalLength;
 }
 
-void HybridProRenderer::saveResultTo(const char* path, rpr_aov aov)
+void HybridProRenderer::saveResultTo(const std::filesystem::path& path, rpr_aov aov)
 {
-    RPR_CHECK(rprFrameBufferSaveToFile(m_aovs[aov], path));
+    RPR_CHECK(rprFrameBufferSaveToFile(m_aovs[aov], path.string().c_str()));
 }
+
 
 void HybridProRenderer::getAov(rpr_aov aov, void* data, size_t size, size_t* retSize) const
 {

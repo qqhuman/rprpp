@@ -29,4 +29,9 @@ ShaderCompilationError::ShaderCompilationError(const std::string& message)
 {
 }
 
+InvalidOperation::InvalidOperation(const std::string& message)
+    : Error(RPRPP_ERROR_INVALID_OPERATION, "Invalid operation. " + message)
+{
+}
+
 } // namespace
